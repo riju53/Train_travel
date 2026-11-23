@@ -36,10 +36,10 @@ st.set_page_config(
 # =====================================================
 
 # Replace these placeholders with your newly generated API keys.
-GROQ_API_KEY = "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"
-weather_api_key = "b65988ddae944bf993993731262105"
-IRCTC_API_KEY = "re_live_27cb751a2d64cba6d8f75f664eb4ef66"
-TAVILY_API_KEY = "tvly-4eT6lE-NVyOg8k50jhsmE0Z4yqr0HEIPlQJsMkfZi9D3l5YqX"
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+weather_api_key = st.secrets["WEATHER_API_KEY"]
+IRCTC_API_KEY = st.secrets["IRCTC_API_KEY"]
+TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
 
 
 # =====================================================
