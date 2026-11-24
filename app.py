@@ -34,10 +34,19 @@ st.set_page_config(
 # =====================================================
 # 2. API KEYS
 # =====================================================
+# Add these values in Streamlit Community Cloud > App settings > Secrets.
+GROQ_API_KEY = "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"
+#weather_api_key = "b65988ddae944bf993993731262105"
+WEATHER_API_KEY = "bdf551fa5200464392c154616261111"
+IRCTC_API_KEY = "re_live_27cb751a2d64cba6d8f75f664eb4ef66"
+TAVILY_API_KEY = "tvly-4eT6lE-NVyOg8k50jhsmE0Z4yqr0HEIPlQJsMkfZi9D3l5YqX"
 
-# Replace these placeholders with your newly generated API keys.
+# =====================================================
+# 2. API KEYS
+# =====================================================
+
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-weather_api_key = st.secrets["WEATHER_API_KEY"]
+WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
 IRCTC_API_KEY = st.secrets["IRCTC_API_KEY"]
 TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
 
@@ -78,18 +87,102 @@ checkpointer = get_checkpointer()
 # 5. WEATHER TOOL
 # =====================================================
 
-@tool
-def weather_tool(to_city: str):
-    """Generate weather information for a city."""
 
-    url = "https://api.weatherapi.com/v1/current.json"
+import requests
+import streamlit as st
+from langchain_core.tools import tool
 
-    params = {
-        "key": weather_api_key,
-        "q": to_city
+# Store your regenerated key in Streamlit secrets.
+WEATHER_API_KEY  = WEATHER_API_KEY
+
+
+def get_station_location(station_code: str):
+    """
+    Convert an Indian railway station code into station name and state.
+    """
+
+    url = f"https://api.dharun.dev/v1/stations/{station_code.upper()}"
+
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+
+    result = response.json()
+    station = result.get("data")
+
+    if not station:
+        raise ValueError(f"Station code {station_code} was not found.")
+
+    return {
+        "station_code": station.get("code"),
+        "station_name": station.get("name"),
+        "state": station.get("state")
     }
 
+
+
+# =====================================================
+# 5. STATION LOOKUP + WEATHER TOOL
+# =====================================================
+
+def get_station_location(station_code: str):
+    """
+    Convert an Indian railway station code into station name and state.
+    """
+
+    station_code = station_code.strip().upper()
+
+    if not station_code:
+        raise ValueError("Station code cannot be empty.")
+
+    url = f"https://api.dharun.dev/v1/stations/{station_code}"
+
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+
+    result = response.json()
+    station = result.get("data")
+
+    if not station:
+        raise ValueError(
+            f"Station code {station_code} was not found."
+        )
+
+    return {
+        "station_code": station.get("code") or station_code,
+        "station_name": station.get("name"),
+        "state": station.get("state")
+    }
+
+
+@tool
+def weather_tool(to_city: str):
+    """
+    Get current weather using an Indian railway station code.
+    """
+
     try:
+        # STEP 1: Resolve station code
+        station = get_station_location(to_city)
+
+        station_name = station.get("station_name")
+        state = station.get("state")
+
+        if not station_name:
+            return {"error": "Station name was not available."}
+
+        # STEP 2: Build location query
+        location_query = (
+            f"{station_name}, {state}, India"
+            if state else f"{station_name}, India"
+        )
+
+        # STEP 3: Call WeatherAPI
+        url = "https://api.weatherapi.com/v1/current.json"
+
+        params = {
+            "key": WEATHER_API_KEY,
+            "q": location_query
+        }
 
         response = requests.get(
             url,
@@ -101,7 +194,10 @@ def weather_tool(to_city: str):
 
         data = response.json()
 
+        # STEP 4: Return weather information
         return {
+            "Station_code": station["station_code"],
+            "Station_name": station_name,
             "City": data["location"]["name"],
             "Region": data["location"]["region"],
             "Country": data["location"]["country"],
@@ -112,15 +208,13 @@ def weather_tool(to_city: str):
         }
 
     except requests.exceptions.RequestException as e:
-
         return {
-            "error": f"Weather API error: {str(e)}"
+            "error": f"API request error: {str(e)}"
         }
 
-    except (KeyError, ValueError) as e:
-
+    except (KeyError, ValueError, TypeError) as e:
         return {
-            "error": f"Invalid weather response: {str(e)}"
+            "error": f"Location or weather data error: {str(e)}"
         }
 
 
@@ -480,216 +574,310 @@ app = graph.compile(
 
 
 # =====================================================
-# 17. STREAMLIT USER INTERFACE
+# 17. PROFESSIONAL STREAMLIT TRAVEL DASHBOARD
 # =====================================================
 
-st.title("🚆 AI Travel Assistant")
+st.markdown("""
+<style>
+    .block-container {padding-top: 1.6rem; padding-bottom: 2rem;}
+    .hero {
+        padding: 2rem 2.1rem; border-radius: 18px;
+        background: linear-gradient(115deg, #102f43 0%, #176b78 55%, #3c8d83 100%);
+        color: white; margin-bottom: 1.4rem;
+    }
+    .hero h1 {color: white; font-size: 2.25rem; margin-bottom: .35rem;}
+    .hero p {color: #e0f2f1; margin-bottom: 0;}
+    .section-note {color: #64748b; margin-top: -.55rem;}
+    .info-card {
+        border: 1px solid rgba(120,130,145,.25); border-radius: 14px;
+        padding: 1rem 1.1rem; margin-bottom: .7rem;
+        background: var(--secondary-background-color);
+    }
+    .muted {color: #718096; font-size: .88rem;}
+    .big-value {font-size: 1.55rem; font-weight: 700;}
+</style>
+""", unsafe_allow_html=True)
 
-st.subheader(
-    "Your Personal AI-Powered Travel Planner"
-)
+st.markdown("""
+<div class="hero">
+  <h1>✈️ AI Travel Assistant</h1>
+  <p>Your intelligent travel companion — trains, stays, weather and destination discovery.</p>
+</div>
+""", unsafe_allow_html=True)
 
-st.write(
-    "Plan your journey with AI. "
-    "Search trains, hotels, weather and tourist attractions."
-)
+with st.sidebar:
+    st.title("🧭 Travel planner")
+    st.caption("Create a travel guide for your next journey.")
+    st.info("Enter railway station codes, for example MLDT and HWH.")
+    st.markdown("---")
+    st.caption("Powered by LangGraph · Groq · Tavily · WeatherAPI")
 
-st.divider()
-
-
-# =====================================================
-# 18. USER INPUT
-# =====================================================
-
-st.header("Plan Your Journey")
-
-col1, col2 = st.columns(2)
-
-with col1:
-
-    from_city = st.text_input(
-        "Departure Station Code",
-        placeholder="Example: MLDT"
-    )
-
-with col2:
-
-    to_city = st.text_input(
-        "Destination Station Code",
-        placeholder="Example: HWH"
-    )
-
-
-# =====================================================
-# 19. SESSION MANAGEMENT
-# =====================================================
-
+# Keep the same session-state approach and LangGraph invocation.
 if "thread_id" not in st.session_state:
-
     st.session_state.thread_id = str(uuid.uuid4())
 
-
 if "travel_result" not in st.session_state:
-
     st.session_state.travel_result = None
 
+st.subheader("Plan your journey")
+st.markdown('<p class="section-note">Choose your departure and destination stations to gather travel information.</p>', unsafe_allow_html=True)
 
-# =====================================================
-# 20. GENERATE TRAVEL GUIDE
-# =====================================================
-
-if st.button(
-    "🚀 Generate Travel Guide",
-    type="primary",
-    use_container_width=True
-):
-
-    if not from_city.strip() or not to_city.strip():
-
-        st.warning(
-            "Please enter both departure and destination station codes."
+with st.container(border=True):
+    input_col1, swap_col, input_col2 = st.columns([5, 1, 5])
+    with input_col1:
+        from_city = st.text_input(
+            "From station",
+            placeholder="e.g. MLDT",
+            help="Enter the source station code or city."
+        )
+    with swap_col:
+        st.markdown("<div style='height: 1.9rem'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center;font-size:1.5rem'>⇄</div>", unsafe_allow_html=True)
+    with input_col2:
+        to_city = st.text_input(
+            "To station",
+            placeholder="e.g. HWH",
+            help="Enter the destination station code or city."
         )
 
+    generate_col, reset_col = st.columns([3, 1])
+    with generate_col:
+        generate_clicked = st.button(
+            "🚀 Generate my travel plan",
+            type="primary",
+            use_container_width=True
+        )
+    with reset_col:
+        reset_clicked = st.button(
+            "New journey",
+            use_container_width=True
+        )
+
+if reset_clicked:
+    st.session_state.travel_result = None
+    st.session_state.thread_id = str(uuid.uuid4())
+    st.rerun()
+
+if generate_clicked:
+    if not from_city.strip() or not to_city.strip():
+        st.warning("Please enter both departure and destination station codes.")
+    elif from_city.strip().upper() == to_city.strip().upper():
+        st.warning("Departure and destination stations must be different.")
     else:
-
-        with st.spinner(
-            "AI is preparing your travel guide. Please wait..."
-        ):
-
+        with st.status("Preparing your travel plan...", expanded=True) as status:
             try:
-
+                st.write("Searching trains, hotels, destination information and weather.")
                 result = app.invoke(
-
                     {
                         "messages": [
                             HumanMessage(
-                                content=f"I want to go from {from_city} to {to_city}"
+                                content=f"I want to go from {from_city.strip().upper()} to {to_city.strip().upper()}"
                             )
                         ],
-
                         "from_city": from_city.strip().upper(),
                         "to_city": to_city.strip().upper()
                     },
-
                     config={
                         "configurable": {
                             "thread_id": st.session_state.thread_id
                         }
                     }
                 )
-
                 st.session_state.travel_result = result
-
-                st.success(
-                    "Your travel guide has been generated successfully!"
-                )
-
+                status.update(label="Your travel plan is ready!", state="complete", expanded=False)
+                st.success("Travel information has been collected.")
             except Exception as e:
+                status.update(label="Unable to complete the travel plan", state="error")
+                st.error(f"Something went wrong: {e}")
 
-                st.error(
-                    f"Something went wrong: {str(e)}"
-                )
+# Helpers for displaying the existing tool outputs without changing graph state.
+def _extract_tavily_results(payload):
+    """Return Tavily result entries when the response has a results list."""
+    if isinstance(payload, dict):
+        if isinstance(payload.get("results"), list):
+            return payload["results"]
+        info = payload.get("hotel_information") or payload.get("city_information")
+        if isinstance(info, dict) and isinstance(info.get("results"), list):
+            return info["results"]
+    return []
 
+def _show_search_cards(payload, empty_message):
+    entries = _extract_tavily_results(payload)
+    if entries:
+        for item in entries:
+            if not isinstance(item, dict):
+                st.write(item)
+                continue
+            title = item.get("title") or item.get("url") or "Search result"
+            content = item.get("content") or item.get("snippet") or ""
+            url = item.get("url")
+            with st.container(border=True):
+                st.markdown(f"**{title}**")
+                if content:
+                    st.write(content)
+                if url:
+                    st.markdown(f"[Open source]({url})")
+    elif isinstance(payload, dict) and payload.get("error"):
+        st.warning(payload["error"])
+    else:
+        st.info(empty_message)
+        st.json(payload)
+
+def _geocode_city(city_name):
+    """Best-effort city lookup for the map; returns None if unavailable."""
+    try:
+        response = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": f"{city_name}, India", "format": "json", "limit": 1},
+            headers={"User-Agent": "AI-Travel-Assistant/1.0"},
+            timeout=10
+        )
+        response.raise_for_status()
+        places = response.json()
+        if places:
+            return {
+                "lat": float(places[0]["lat"]),
+                "lon": float(places[0]["lon"])
+            }
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return None
+    return None
 
 # =====================================================
-# 21. DISPLAY RESULTS
+# 18. DASHBOARD RESULTS
 # =====================================================
 
 if st.session_state.travel_result is not None:
-
     result = st.session_state.travel_result
+    train_result = result.get("train_result", {}) or {}
+    hotel_result = result.get("hotel_result", {}) or {}
+    weather_result = result.get("weather_result", {}) or {}
+    city_result = result.get("city_result", {}) or {}
+    trains = train_result.get("trains", []) if isinstance(train_result, dict) else []
 
-    st.divider()
-
-    st.header("✈️ Your Travel Guide")
-
-    st.markdown(
-        result.get("final_result", "No travel guide generated.")
+    st.markdown("---")
+    st.header("Your journey dashboard")
+    st.caption(
+        f"{train_result.get('source', from_city or 'Source')}  →  "
+        f"{train_result.get('destination', to_city or 'Destination')}"
     )
 
-    st.divider()
+    # Weather overview cards
+    st.subheader("🌤️ Destination weather")
+    if isinstance(weather_result, dict) and not weather_result.get("error"):
+        w1, w2, w3, w4 = st.columns(4)
+        w1.metric("Temperature", f"{weather_result.get('Temperature', 'N/A')} °C")
+        w2.metric("Condition", weather_result.get("Condition", "N/A"))
+        w3.metric("Humidity", f"{weather_result.get('Humidity', 'N/A')}%")
+        w4.metric("City", weather_result.get("City", "N/A"))
+        if weather_result.get("Condition_icon"):
+            icon_url = weather_result["Condition_icon"]
+            if icon_url.startswith("//"):
+                icon_url = "https:" + icon_url
+            st.image(icon_url, width=64)
+    else:
+        st.warning(
+            weather_result.get("error", "Weather information is unavailable.")
+            if isinstance(weather_result, dict) else "Weather information is unavailable."
+        )
 
-    st.header("📋 Detailed Travel Information")
+    st.markdown("---")
+    trains_tab, hotels_tab, map_tab, guide_tab, raw_tab = st.tabs(
+        ["🚆 Trains", "🏨 Hotels", "📍 Destination map", "✨ AI travel guide", "🔎 Raw data"]
+    )
 
-
-    # Train information
-
-    with st.expander("🚆 Train Information", expanded=True):
-
-        train_result = result.get("train_result", {})
-
-        st.json(train_result)
-
-
-    # Hotel information
-
-    with st.expander("🏨 Hotel Information"):
-
-        hotel_result = result.get("hotel_result", {})
-
-        st.json(hotel_result)
-
-
-    # Weather information
-
-    with st.expander("🌤️ Weather Information"):
-
-        weather_result = result.get("weather_result", {})
-
-        if "error" not in weather_result:
-
-            st.metric(
-                "Temperature",
-                f"{weather_result.get('Temperature', 'N/A')} °C"
-            )
-
-            st.write(
-                "**City:**",
-                weather_result.get("City", "N/A")
-            )
-
-            st.write(
-                "**Condition:**",
-                weather_result.get("Condition", "N/A")
-            )
-
-            st.write(
-                "**Humidity:**",
-                f"{weather_result.get('Humidity', 'N/A')}%"
-            )
-
+    with trains_tab:
+        st.subheader("Available train options")
+        if isinstance(train_result, dict) and train_result.get("error"):
+            st.error(train_result["error"])
+        elif trains:
+            st.caption(f"{len(trains)} train option(s) returned by the train API.")
+            for train in trains:
+                train_name = train.get("train_name") or "Train name unavailable"
+                train_number = train.get("train_number") or "Number unavailable"
+                with st.container(border=True):
+                    title_col, type_col = st.columns([4, 1])
+                    with title_col:
+                        st.markdown(f"### 🚆 {train_name}")
+                        st.caption(f"Train no. {train_number}")
+                    with type_col:
+                        st.caption(train.get("train_type") or "Train")
+                    dep_col, arrow_col, arr_col = st.columns([4, 1, 4])
+                    with dep_col:
+                        st.markdown(f"**{train.get('departure') or 'N/A'}**")
+                        st.caption(f"{train.get('from_station') or 'Source'} ({train.get('from_code') or ''})")
+                    with arrow_col:
+                        st.markdown("<div style='text-align:center;padding-top:.3rem'>→</div>", unsafe_allow_html=True)
+                    with arr_col:
+                        st.markdown(f"**{train.get('arrival') or 'N/A'}**")
+                        st.caption(f"{train.get('to_station') or 'Destination'} ({train.get('to_code') or ''})")
+                    d1, d2, d3, d4 = st.columns(4)
+                    d1.caption("Duration")
+                    d1.write(train.get("duration") or "N/A")
+                    d2.caption("Distance")
+                    d2.write(f"{train.get('distance_km')} km" if train.get("distance_km") is not None else "N/A")
+                    d3.caption("Estimated fare")
+                    d3.write(str(train.get("estimated_fare") or "Not provided"))
+                    d4.caption("Classes")
+                    classes = train.get("classes") or []
+                    d4.write(", ".join(map(str, classes)) if classes else "N/A")
+                    running_days = train.get("running_days") or []
+                    if running_days:
+                        st.caption("Running days: " + ", ".join(map(str, running_days)))
         else:
+            st.info("The train API did not return train options for this route.")
+            if isinstance(train_result, dict):
+                st.json(train_result)
 
-            st.error(weather_result["error"])
+    with hotels_tab:
+        st.subheader("Stay options")
+        _show_search_cards(
+            hotel_result,
+            "The hotel search did not return individually structured results. Raw search information is shown below when available."
+        )
 
+    with map_tab:
+        st.subheader("Explore the destination")
+        destination_name = (
+            weather_result.get("City")
+            if isinstance(weather_result, dict) else None
+        ) or to_city
+        st.caption(f"Map location lookup for {destination_name}, India.")
+        if destination_name:
+            with st.spinner("Finding destination coordinates..."):
+                coordinates = _geocode_city(destination_name)
+            if coordinates:
+                st.map(
+                    [{"latitude": coordinates["lat"], "longitude": coordinates["lon"]}],
+                    zoom=10,
+                    use_container_width=True
+                )
+                st.caption("Map marker shows the destination city, not individual tourist attractions.")
+            else:
+                st.info("A map location could not be found. You can still explore the destination details in the AI guide.")
+        st.markdown("**Destination research**")
+        _show_search_cards(city_result, "No separate destination search results were returned.")
 
-    # City information
+    with guide_tab:
+        st.subheader("Your AI-generated travel guide")
+        st.markdown(result.get("final_result", "No travel guide was generated."))
 
-    with st.expander("🏙️ City Information"):
+    with raw_tab:
+        st.caption("Original tool outputs from your existing LangGraph workflow.")
+        with st.expander("Train API response"):
+            st.json(train_result)
+        with st.expander("Hotel search response"):
+            st.json(hotel_result)
+        with st.expander("Weather API response"):
+            st.json(weather_result)
+        with st.expander("City search response"):
+            st.json(city_result)
 
-        city_result = result.get("city_result", {})
-
-        st.json(city_result)
-
-
-    st.divider()
-
-    if st.button("🔄 Plan Another Journey"):
-
+    st.markdown("---")
+    if st.button("🔄 Plan another journey", use_container_width=True):
         st.session_state.travel_result = None
-
         st.session_state.thread_id = str(uuid.uuid4())
-
         st.rerun()
 
-
-# =====================================================
-# 22. FOOTER
-# =====================================================
-
-st.divider()
-
-st.caption(
-    "AI Travel Assistant | Powered by LangGraph, Groq, "
-    "Tavily, WeatherAPI and IRCTC API @ Tathagata Nath"
-)
+st.markdown("---")
+st.caption("AI Travel Assistant · LangGraph + Groq + Tavily + WeatherAPI + IRCTC API")
